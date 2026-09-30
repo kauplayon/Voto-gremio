@@ -1,0 +1,12 @@
+<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vota Grêmio</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head><body>
+<header class="top"><div class="brand"><span class="brand-icon">✦</span> Vota Grêmio</div><a class="admin-link" href="/admin">Área administrativa ↗</a></header>
+<main class="wrap"><section class="hero"><div class="eyebrow">ELEIÇÃO ESTUDANTIL</div><h1>Sua voz, sua escola.<br><span>Seu voto faz a diferença.</span></h1><p>Escolha o grêmio que você acredita que pode representar os estudantes.</p></section>
+{% with messages = get_flashed_messages() %}{% if messages %}<div class="notice">{{ messages[-1] }}</div>{% endif %}{% endwith %}
+{% if data.aberta %}
+<form method="post" action="/votar" id="voteForm"><label class="field-label" for="nome">Primeiro, digite seu nome</label><input id="nome" name="nome" type="text" maxlength="100" placeholder="Ex.: Maria Silva" autocomplete="off" required>
+<div class="section-title"><div><h2>Escolha seu grêmio</h2><p>Selecione apenas uma opção.</p></div><span class="pill">VOTAÇÃO ABERTA</span></div>
+<div class="cards">{% for g in data.gremios %}<label class="card"><input type="radio" name="gremio_id" value="{{ g.id }}" required><span class="radio"></span><span class="emoji">{{ g.emoji }}</span><span class="card-text"><strong>{{ g.nome }}</strong><small>{{ g.descricao }}</small></span><span class="choose">Selecionar</span></label>{% endfor %}</div>
+<button class="submit" type="submit">Confirmar meu voto <span>→</span></button><p class="privacy">🔒 Seu voto é registrado uma única vez neste computador.</p></form>
+{% else %}<div class="closed"><span>🔒</span><h2>Votação encerrada</h2><p>Obrigado pela participação!</p></div>{% endif %}
+</main><footer>Participação estudantil começa com a sua voz.</footer>
+<script>document.getElementById('voteForm')?.addEventListener('submit',e=>{if(!document.querySelector('input[name="gremio_id"]:checked')){e.preventDefault();alert('Selecione um grêmio.');return;}if(!confirm('Confirmar seu voto? Depois de confirmar, não será possível votar novamente com este nome.'))e.preventDefault();});</script></body></html>
