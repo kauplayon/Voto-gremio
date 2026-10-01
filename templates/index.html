@@ -5,7 +5,7 @@
 {% if data.aberta %}
 <form method="post" action="/votar" id="voteForm"><label class="field-label" for="nome">Primeiro, digite seu nome</label><input id="nome" name="nome" type="text" maxlength="100" placeholder="Ex.: Maria Silva" autocomplete="off" required>
 <div class="section-title"><div><h2>Escolha seu grêmio</h2><p>Selecione apenas uma opção.</p></div><span class="pill">VOTAÇÃO ABERTA</span></div>
-<div class="cards">{% for g in data.gremios %}<label class="card"><input type="radio" name="gremio_id" value="{{ g.id }}" required><span class="radio"></span>{% if g.foto %}<img class="candidate-foto" src="{{ url_for('static', filename=g.foto) }}" alt="Foto de {{ g.nome }}">{% else %}<span class="emoji">{{ g.emoji }}</span>{% endif %}<span class="card-text"><strong>{{ g.nome }}</strong><small>{{ g.descricao }}</small></span><span class="choose">Selecionar</span></label>{% endfor %}</div>
+<div class="cards">{% for g in data.gremios %}<label class="card"><input type="radio" name="gremio_id" value="{{ g.id }}" required><span class="radio"></span>{% if g.foto %}<img class="candidate-foto" src="{{ url_for('uploaded_file', filename=g.foto.split('/', 1)[1]) }}" alt="Foto de {{ g.nome }}">{% else %}<span class="emoji">{{ g.emoji }}</span>{% endif %}<span class="card-text"><strong>{{ g.nome }}</strong><small>{{ g.descricao }}</small></span><span class="choose">Selecionar</span></label>{% endfor %}</div>
 <button class="submit" type="submit">Confirmar meu voto <span>→</span></button><p class="privacy">🔒 Seu voto é registrado uma única vez neste computador.</p></form>
 {% else %}<div class="closed"><span>🔒</span><h2>Votação encerrada</h2><p>Obrigado pela participação!</p></div>{% endif %}
 </main><footer>Participação estudantil começa com a sua voz.</footer>
