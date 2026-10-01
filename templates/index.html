@@ -6,7 +6,40 @@
 <form method="post" action="/votar" id="voteForm"><label class="field-label" for="nome">Primeiro, digite seu nome</label><input id="nome" name="nome" type="text" maxlength="100" placeholder="Ex.: Maria Silva" autocomplete="off" required>
 <div class="section-title"><div><h2>Escolha seu grêmio</h2><p>Selecione apenas uma opção.</p></div><span class="pill">VOTAÇÃO ABERTA</span></div>
 <div class="cards">{% for g in data.gremios %}<label class="card"><input type="radio" name="gremio_id" value="{{ g.id }}" required><span class="radio"></span>{% if g.foto %}<img class="candidate-foto" src="{{ url_for('uploaded_file', filename=g.foto.split('/', 1)[1]) }}" alt="Foto de {{ g.nome }}">{% else %}<span class="emoji">{{ g.emoji }}</span>{% endif %}<span class="card-text"><strong>{{ g.nome }}</strong><small>{{ g.descricao }}</small></span><span class="choose">Selecionar</span></label>{% endfor %}</div>
-<button class="submit" type="submit">Confirmar meu voto <span>→</span></button><p class="privacy">🔒 Seu voto é registrado uma única vez neste computador.</p></form>
+<button class="submit" type="button" id="openConfirm">Confirmar meu voto <span>→</span></button><p class="privacy">🔒 Seu voto é registrado uma única vez neste computador.</p></form>
 {% else %}<div class="closed"><span>🔒</span><h2>Votação encerrada</h2><p>Obrigado pela participação!</p></div>{% endif %}
-</main><footer>Participação estudantil começa com a sua voz.</footer>
-<script>document.getElementById('voteForm')?.addEventListener('submit',e=>{if(!document.querySelector('input[name="gremio_id"]:checked')){e.preventDefault();alert('Selecione um grêmio.');return;}if(!confirm('Confirmar seu voto? Depois de confirmar, não será possível votar novamente com este nome.'))e.preventDefault();});</script></body></html>
+</main><div class="confirm-overlay" id="confirmOverlay" aria-hidden="true">
+  <div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <div class="confirm-icon">?</div>
+    <h2 id="confirmTitle">Certeza do seu voto?</h2>
+    <p>Depois de confirmar, não será possível votar novamente com este nome.</p>
+    <div class="confirm-actions">
+      <button type="button" class="confirm-cancel" id="cancelConfirm">Voltar</button>
+      <button type="button" class="confirm-yes" id="yesConfirm">Sim, confirmar voto</button>
+    </div>
+  </div>
+</div>
+<footer>Participação estudantil começa com a sua voz.</footer>
+<script>
+const voteForm = document.getElementById('voteForm');
+const overlay = document.getElementById('confirmOverlay');
+document.getElementById('openConfirm')?.addEventListener('click', () => {
+  if (!voteForm.reportValidity()) return;
+  if (!document.querySelector('input[name="gremio_id"]:checked')) {
+    alert('Selecione um grêmio.');
+    return;
+  }
+  overlay.classList.add('show');
+  overlay.setAttribute('aria-hidden', 'false');
+});
+function closeConfirm() {
+  overlay.classList.remove('show');
+  overlay.setAttribute('aria-hidden', 'true');
+}
+document.getElementById('cancelConfirm')?.addEventListener('click', closeConfirm);
+document.getElementById('yesConfirm')?.addEventListener('click', () => {
+  document.getElementById('yesConfirm').disabled = true;
+  voteForm.submit();
+});
+overlay?.addEventListener('click', e => { if (e.target === overlay) closeConfirm(); });
+</script></body></html>
