@@ -145,6 +145,16 @@ def excluir_gremio(gremio_id):
         flash("Grêmio excluído com sucesso.")
     return redirect(url_for("painel"))
 
+@app.post("/admin/zerar-votos")
+@admin_required
+def zerar_votos():
+    data = load_data()
+    data["votos"] = {str(g["id"]): 0 for g in data["gremios"]}
+    data["nomes_votantes"] = []
+    save_data(data)
+    flash("Votos zerados. Os alunos poderão votar novamente.")
+    return redirect(url_for("painel"))
+
 @app.post("/admin/estado")
 @admin_required
 def estado():
