@@ -1,11 +1,15 @@
-import json, os, unicodedata
+import json, os, unicodedata, uuid
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, session, flash, Response
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "troque-esta-chave-antes-de-usar")
+app.config["MAX_CONTENT_LENGTH"] = 4 * 1024 * 1024
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 DATA_FILE = os.path.join(os.path.dirname(__file__), "votos.json")
+UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "static", "uploads")
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 
 DEFAULT = {
     "aberta": True,
@@ -94,14 +98,30 @@ def painel():
 def add_gremio():
     nome = request.form.get("nome", "").strip()
     descricao = request.form.get("descricao", "").strip()
-    if nome:
-        data = load_data()
-        next_id = max([g["id"] for g in data["gremios"]] or [0]) + 1
-        data["gremios"].append({"id": next_id, "nome": nome[:70],
-                                "descricao": descricao[:180], "emoji": "🎓"})
-        data["votos"][str(next_id)] = 0
-        save_data(data)
-        flash("Grêmio cadastrado.")
+    foto = request.files.get("foto")
+    if not nome:
+        flash("Informe o nome do grêmio.")
+        return redirect(url_for("painel"))
+    if foto and foto.filename:
+        original = secure_filename(foto.filename)
+        extensao = original.rsplit(".", 1)[-1].lower() if "." in original else ""
+        if extensao not in ALLOWED_EXTENSIONS:
+            flash("A foto deve estar no formato PNG, JPG ou WEBP.")
+            return redirect(url_for("painel"))
+        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+        nome_arquivo = f"gremio_{uuid.uuid4().hex}.{extensao}"
+        foto.save(os.path.join(UPLOAD_FOLDER, nome_arquivo))
+        caminho_foto = f"uploads/{nome_arquivo}"
+    else:
+        caminho_foto = ""
+    data = load_data()
+    next_id = max([g["id"] for g in data["gremios"]] or [0]) + 1
+    data["gremios"].append({"id": next_id, "nome": nome[:70],
+                            "descricao": descricao[:180], "emoji": "🎓",
+                            "foto": caminho_foto})
+    data["votos"][str(next_id)] = 0
+    save_data(data)
+    flash("Grêmio cadastrado com sucesso!")
     return redirect(url_for("painel"))
 
 @app.post("/admin/estado")
