@@ -1,4 +1,4 @@
-<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vota Grêmio</title><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head><body>
+<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vota Grêmio</title><link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}"><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head><body>
 <header class="top"><div class="brand"><span class="brand-icon">✦</span> Vota Grêmio</div><a class="admin-link" href="/admin">Área administrativa ↗</a></header>
 <main class="wrap"><section class="hero"><div class="eyebrow">ELEIÇÃO ESTUDANTIL</div><h1>Sua voz, sua escola.<br><span>Seu voto faz a diferença.</span></h1><p>Escolha o grêmio que você acredita que pode representar os estudantes.</p></section>
 {% with messages = get_flashed_messages() %}{% if messages %}<div class="notice">{{ messages[-1] }}</div>{% endif %}{% endwith %}
