@@ -124,6 +124,27 @@ def add_gremio():
     flash("Grêmio cadastrado com sucesso!")
     return redirect(url_for("painel"))
 
+@app.post("/admin/gremio/<int:gremio_id>/excluir")
+@admin_required
+def excluir_gremio(gremio_id):
+    data = load_data()
+    gremio = next((g for g in data["gremios"] if g["id"] == gremio_id), None)
+    if gremio is None:
+        flash("Grêmio não encontrado.")
+    elif data["votos"].get(str(gremio_id), 0) > 0:
+        flash("Não é possível excluir um grêmio que já recebeu votos.")
+    else:
+        data["gremios"] = [g for g in data["gremios"] if g["id"] != gremio_id]
+        data["votos"].pop(str(gremio_id), None)
+        foto = gremio.get("foto", "")
+        if foto:
+            caminho = os.path.join(os.path.dirname(__file__), "static", foto)
+            if os.path.isfile(caminho):
+                os.remove(caminho)
+        save_data(data)
+        flash("Grêmio excluído com sucesso.")
+    return redirect(url_for("painel"))
+
 @app.post("/admin/estado")
 @admin_required
 def estado():
