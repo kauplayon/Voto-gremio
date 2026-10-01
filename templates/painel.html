@@ -38,7 +38,8 @@
 {% endfor %}
 </div>
 </section>
-<section class="panel"><h2>Controle da votação</h2><p>Abra ou encerre a votação.</p><form method="post" action="/admin/estado"><input type="hidden" name="aberta" value="{{ 'nao' if data.aberta else 'sim' }}"><button class="submit {{ 'danger' if data.aberta else '' }}">{{ "Encerrar votação" if data.aberta else "Abrir votação" }}</button></form></section>
+<section class="panel"><h2>Controle da votação</h2><p>Abra ou encerre a votação.</p><form method="post" action="/admin/estado"><input type="hidden" name="aberta" value="{{ 'nao' if data.aberta else 'sim' }}"><button class="submit {{ 'danger' if data.aberta else '' }}">{{ "Encerrar votação" if data.aberta else "Abrir votação" }}</button></form>
+<hr class="divider"><h2>Reiniciar votação</h2><p>Zera a contagem de todos os grêmios e libera os nomes para votar novamente.</p><form method="post" action="/admin/zerar-votos" onsubmit="return confirm('ATENÇÃO: isso apagará todos os votos e permitirá que os nomes votem novamente. Deseja continuar?')"><button class="reset-btn" type="submit">Zerar todos os votos</button></form></section>
 </div>
 {% with messages = get_flashed_messages() %}{% if messages %}<div class="notice">{{ messages[-1] }}</div>{% endif %}{% endwith %}
 <p class="privacy">Os nomes usados para impedir votos repetidos ficam armazenados localmente. Para uma eleição oficial, considere usar uma identificação validada e realizar testes de segurança.</p>
