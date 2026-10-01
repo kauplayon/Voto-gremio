@@ -22,13 +22,18 @@
 </section>
 <div class="grid2">
 <section class="panel">
-<div class="section-title"><div><h2>Grêmios cadastrados</h2><p>Adicione os grupos que aparecerão na votação.</p></div></div>
+<div class="section-title"><div><h2>Grêmios cadastrados</h2><p>Adicione ou exclua os grupos que aparecerão na votação.</p></div></div>
 <button type="button" class="submit" id="abrirModal">＋ Adicionar grêmio</button>
 <div class="gremio-list">
 {% for g in gremios %}
 <div class="gremio-item">
 {% if g.foto %}<img class="gremio-foto" src="{{ url_for('static', filename=g.foto) }}" alt="Foto de {{ g.nome }}">{% else %}<div class="gremio-foto sem-foto">{{ g.emoji }}</div>{% endif %}
-<div><strong>{{ g.nome }}</strong><p>{{ g.descricao or "Sem descrição." }}</p></div>
+<div class="gremio-info"><strong>{{ g.nome }}</strong><p>{{ g.descricao or "Sem descrição." }}</p></div>
+{% if g.votos == 0 %}
+<form method="post" action="{{ url_for('excluir_gremio', gremio_id=g.id) }}" onsubmit="return confirm('Tem certeza que deseja excluir {{ g.nome|e }}?')"><button type="submit" class="delete-btn">Excluir</button></form>
+{% else %}
+<span class="locked-delete" title="Grêmios com votos não podem ser excluídos">Com votos</span>
+{% endif %}
 </div>
 {% endfor %}
 </div>
