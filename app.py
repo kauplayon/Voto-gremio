@@ -1,14 +1,18 @@
 import json, os, unicodedata, uuid
 from functools import wraps
-from flask import Flask, render_template, request, redirect, url_for, session, flash, Response
+from flask import Flask, render_template, request, redirect, url_for, session, flash, Response, send_from_directory
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "troque-esta-chave-antes-de-usar")
 app.config["MAX_CONTENT_LENGTH"] = 4 * 1024 * 1024
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
-DATA_FILE = os.path.join(os.path.dirname(__file__), "votos.json")
-UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "static", "uploads")
+# No Render, configure um Persistent Disk montado em /var/data e DATA_DIR=/var/data.
+# Assim, votos, gremios e fotos ficam fora da pasta temporaria do deploy.
+DATA_DIR = os.environ.get("DATA_DIR", os.path.dirname(__file__))
+DATA_FILE = os.path.join(DATA_DIR, "votos.json")
+UPLOAD_FOLDER = os.path.join(DATA_DIR, "uploads")
+LEGACY_DATA_FILE = os.path.join(os.path.dirname(__file__), "votos.json")
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 
 DEFAULT = {
@@ -23,6 +27,11 @@ DEFAULT = {
 }
 
 def load_data():
+    os.makedirs(DATA_DIR, exist_ok=True)
+    # Migra os dados antigos na primeira inicializacao, se o arquivo ainda existir.
+    if not os.path.exists(DATA_FILE) and os.path.exists(LEGACY_DATA_FILE):
+        with open(LEGACY_DATA_FILE, "r", encoding="utf-8") as antigo:
+            save_data(json.load(antigo))
     if not os.path.exists(DATA_FILE):
         save_data(DEFAULT)
     with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -45,6 +54,10 @@ def admin_required(fn):
             return redirect(url_for("admin_login"))
         return fn(*args, **kwargs)
     return wrapper
+
+@app.get("/uploads/<path:filename>")
+def uploaded_file(filename):
+    return send_from_directory(UPLOAD_FOLDER, filename)
 
 @app.route("/")
 def index():
@@ -138,7 +151,7 @@ def excluir_gremio(gremio_id):
         data["votos"].pop(str(gremio_id), None)
         foto = gremio.get("foto", "")
         if foto:
-            caminho = os.path.join(os.path.dirname(__file__), "static", foto)
+            caminho = os.path.join(DATA_DIR, foto)
             if os.path.isfile(caminho):
                 os.remove(caminho)
         save_data(data)
