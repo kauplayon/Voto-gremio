@@ -277,10 +277,10 @@ def exportar():
     data = load_data()
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Número", "Candidato", "Chapa", "Votos"])
+    writer.writerow(["Número", "Candidato", "Cargo", "Chapa", "Votos"])
     for c in data["candidatos"]:
         chapa = next((x for x in data["chapas"] if x["id"] == c["chapa_id"]), None)
-        writer.writerow([c["numero"], c["nome"], chapa["nome"] if chapa else "", data["votos"].get(str(c["id"]), 0)])
+        writer.writerow([c["numero"], c["nome"], c.get("cargo", ""), chapa["nome"] if chapa else "", data["votos"].get(str(c["id"]), 0)])
     return Response("\ufeff" + output.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": "attachment; filename=resultados_candidatos.csv"})
 
