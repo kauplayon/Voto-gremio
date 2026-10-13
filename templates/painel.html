@@ -1,64 +1,33 @@
-<!doctype html>
-<html lang="pt-br">
-<head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Painel | Vota Grêmio</title>
-<link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}"><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body>
+<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Painel | Vota Grêmio</title><link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}"><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head><body>
 <header class="top"><a class="brand" href="/">✦ Vota Grêmio</a><a class="admin-link" href="/sair">Sair ↗</a></header>
-<main class="wrap">
-<div class="eyebrow">PAINEL DO RESPONSÁVEL</div><h1>Resultados da eleição</h1>
-<div class="stats">
-<div class="stat"><small>Votos registrados</small><strong>{{ total }}</strong></div>
-<div class="stat"><small>Status</small><strong class="status">{{ "Aberta" if data.aberta else "Encerrada" }}</strong></div>
-<div class="stat"><small>Grêmios</small><strong>{{ gremios|length }}</strong></div>
-</div>
-<section class="panel">
-<div class="section-title"><div><h2>Apuração</h2><p>Quantidade de votos por grêmio.</p></div><a class="small-btn" href="/admin/exportar">Exportar CSV ↓</a></div>
-{% for g in gremios %}
-<div class="result"><div class="result-head"><span>{% if g.foto %}<img class="mini-foto" src="{{ url_for('static', filename=g.foto) }}" alt="Foto de {{ g.nome }}">{% else %}{{ g.emoji }}{% endif %} <b>{{ g.nome }}</b></span><strong>{{ g.votos }}</strong></div><div class="bar"><span style="width:{{ (g.votos / total * 100) if total else 0 }}%"></span></div></div>
-{% endfor %}
+<main class="wrap"><div class="eyebrow">PAINEL DO RESPONSÁVEL</div><h1>Configuração da eleição</h1>
+{% with messages = get_flashed_messages() %}{% if messages %}<div class="notice">{{ messages[-1] }}</div>{% endif %}{% endwith %}
+<div class="stats"><div class="stat"><small>Votos registrados</small><strong>{{ total }}</strong></div><div class="stat"><small>Status</small><strong class="status">{{ "Aberta" if data.aberta else "Encerrada" }}</strong></div><div class="stat"><small>Candidatos</small><strong>{{ candidatos|length }}</strong></div></div>
+<section class="panel"><div class="section-title"><div><h2>Apuração por candidato</h2><p>Cada candidato tem sua própria contagem de votos.</p></div><a class="small-btn" href="/admin/exportar">Exportar CSV ↓</a></div>
+{% if candidatos %}{% for c in candidatos %}<div class="result"><div class="candidate-result"><div class="candidate-result-info">{% if c.foto %}<img class="mini-foto" src="{{ url_for('uploaded_file', filename=c.foto.split('/', 1)[1]) }}" alt="Foto">{% else %}<span class="result-number">{{ c.numero }}</span>{% endif %}<div><b>{{ c.nome }}</b><small>{{ c.chapa.nome if c.chapa else "Sem chapa" }} · nº {{ c.numero }}</small></div></div><strong>{{ c.votos }}</strong></div><div class="bar"><span style="width:{{ (c.votos / total * 100) if total else 0 }}%"></span></div></div>{% endfor %}{% else %}<p>Nenhum candidato cadastrado ainda.</p>{% endif %}
+{% if data.votos_legados %}<div class="legacy-note"><strong>Votos do sistema anterior preservados:</strong>{% for chapa in chapas %}{% if data.votos_legados.get(chapa.id|string, 0) %}<span>{{ chapa.nome }}: {{ data.votos_legados.get(chapa.id|string, 0) }}</span>{% endif %}{% endfor %}<small>Esses votos são de uma votação antiga por grêmio e não foram atribuídos a candidatos individuais.</small></div>{% endif %}
 </section>
 <div class="grid2">
-<section class="panel">
-<div class="section-title"><div><h2>Grêmios cadastrados</h2><p>Adicione ou exclua os grupos que aparecerão na votação.</p></div></div>
-<button type="button" class="submit" id="abrirModal">＋ Adicionar grêmio</button>
-<div class="gremio-list">
-{% for g in gremios %}
-<div class="gremio-item">
-{% if g.foto %}<img class="gremio-foto" src="{{ url_for('static', filename=g.foto) }}" alt="Foto de {{ g.nome }}">{% else %}<div class="gremio-foto sem-foto">{{ g.emoji }}</div>{% endif %}
-<div class="gremio-info"><strong>{{ g.nome }}</strong><p>{{ g.descricao or "Sem descrição." }}</p></div>
-{% if g.votos == 0 %}
-<form method="post" action="{{ url_for('excluir_gremio', gremio_id=g.id) }}" onsubmit="return confirm('Tem certeza que deseja excluir {{ g.nome|e }}?')"><button type="submit" class="delete-btn">Excluir</button></form>
-{% else %}
-<span class="locked-delete" title="Grêmios com votos não podem ser excluídos">Com votos</span>
-{% endif %}
+<section class="panel"><div class="section-title"><div><h2>Cadastrar candidato</h2><p>Defina o número que será digitado na urna.</p></div></div>
+<form method="post" action="/admin/candidato" enctype="multipart/form-data">
+<label class="field-label" for="numero">Número do candidato</label><input id="numero" name="numero" type="text" inputmode="numeric" pattern="[0-9]{1,6}" maxlength="6" placeholder="Ex.: 12" required>
+<label class="field-label" for="nome">Nome completo</label><input id="nome" name="nome" maxlength="100" placeholder="Nome do candidato" required>
+<label class="field-label" for="chapa_id">Chapa</label><select id="chapa_id" name="chapa_id" required><option value="">Selecione uma chapa</option>{% for chapa in chapas %}<option value="{{ chapa.id }}">{{ chapa.nome }}</option>{% endfor %}</select>
+<label class="field-label" for="foto">Foto do candidato (opcional)</label><input id="foto" name="foto" type="file" accept="image/png,image/jpeg,image/webp"><small class="help">PNG, JPG ou WEBP · máximo 4 MB.</small>
+<button type="submit" class="submit">Salvar candidato</button>
+</form></section>
+<section class="panel"><div class="section-title"><div><h2>Cadastrar chapa</h2><p>O logo aparecerá junto ao candidato na urna.</p></div></div>
+<form method="post" action="/admin/chapa" enctype="multipart/form-data">
+<label class="field-label" for="chapa_nome">Nome da chapa</label><input id="chapa_nome" name="nome" maxlength="70" placeholder="Ex.: Chapa União" required>
+<label class="field-label" for="descricao">Descrição (opcional)</label><textarea id="descricao" name="descricao" maxlength="180" rows="3" placeholder="Descrição curta da chapa"></textarea>
+<label class="field-label" for="logo">Logo da chapa</label><input id="logo" name="logo" type="file" accept="image/png,image/jpeg,image/webp"><small class="help">PNG, JPG ou WEBP · máximo 4 MB.</small>
+<button type="submit" class="submit">Salvar chapa</button></form></section>
 </div>
-{% endfor %}
-</div>
+<section class="panel"><div class="section-title"><div><h2>Candidatos cadastrados</h2><p>Os candidatos com votos não podem ser excluídos até zerar a apuração.</p></div></div>
+{% if candidatos %}<div class="gremio-list">{% for c in candidatos %}<div class="gremio-item">{% if c.foto %}<img class="gremio-foto" src="{{ url_for('uploaded_file', filename=c.foto.split('/', 1)[1]) }}" alt="Foto de {{ c.nome }}">{% else %}<div class="gremio-foto sem-foto">{{ c.numero }}</div>{% endif %}<div class="gremio-info"><strong>{{ c.nome }} · nº {{ c.numero }}</strong><p>{{ c.chapa.nome if c.chapa else "Sem chapa" }} · {{ c.votos }} voto(s)</p></div>{% if c.votos == 0 %}<form method="post" action="{{ url_for('excluir_candidato', candidato_id=c.id) }}" onsubmit="return confirm('Excluir o cadastro de {{ c.nome|e }}?')"><button type="submit" class="delete-btn">Excluir</button></form>{% else %}<span class="locked-delete">Com votos</span>{% endif %}</div>{% endfor %}</div>{% else %}<p>Nenhum candidato cadastrado.</p>{% endif %}
 </section>
-<section class="panel"><h2>Controle da votação</h2><p>Abra ou encerre a votação.</p><form method="post" action="/admin/estado"><input type="hidden" name="aberta" value="{{ 'nao' if data.aberta else 'sim' }}"><button class="submit {{ 'danger' if data.aberta else '' }}">{{ "Encerrar votação" if data.aberta else "Abrir votação" }}</button></form>
-<hr class="divider"><h2>Reiniciar votação</h2><p>Zera a contagem de todos os grêmios e libera os nomes para votar novamente.</p><form method="post" action="/admin/zerar-votos" onsubmit="return confirm('ATENÇÃO: isso apagará todos os votos e permitirá que os nomes votem novamente. Deseja continuar?')"><button class="reset-btn" type="submit">Zerar todos os votos</button></form></section>
-</div>
-{% with messages = get_flashed_messages() %}{% if messages %}<div class="notice">{{ messages[-1] }}</div>{% endif %}{% endwith %}
-<p class="privacy">Os nomes usados para impedir votos repetidos ficam armazenados localmente. Para uma eleição oficial, considere usar uma identificação validada e realizar testes de segurança.</p>
-</main>
-<dialog id="modalGremio" class="modal">
-<div class="modal-head"><div><div class="eyebrow">NOVO CADASTRO</div><h2>Adicionar grêmio</h2></div><button type="button" class="fechar" id="fecharModal" aria-label="Fechar">×</button></div>
-<form method="post" action="/admin/gremio" enctype="multipart/form-data">
-<label class="field-label" for="nome">Nome do grêmio</label><input id="nome" name="nome" maxlength="70" placeholder="Ex.: Grêmio Voz Estudantil" required>
-<label class="field-label" for="descricao">Breve descrição</label><textarea id="descricao" name="descricao" maxlength="180" rows="3" placeholder="Conte um pouco sobre as propostas do grêmio..."></textarea>
-<label class="field-label" for="foto">Foto do grêmio</label><input id="foto" name="foto" type="file" accept="image/png,image/jpeg,image/webp">
-<small class="help">Formatos aceitos: PNG, JPG ou WEBP. Tamanho máximo: 4 MB.</small>
-<div class="modal-actions"><button type="button" class="cancelar" id="cancelarModal">Cancelar</button><button type="submit" class="submit">Salvar grêmio</button></div>
-</form>
-</dialog>
-<script>
-const modal=document.getElementById('modalGremio');
-document.getElementById('abrirModal').addEventListener('click',()=>modal.showModal());
-document.getElementById('fecharModal').addEventListener('click',()=>modal.close());
-document.getElementById('cancelarModal').addEventListener('click',()=>modal.close());
-modal.addEventListener('click',e=>{if(e.target===modal)modal.close()});
-</script>
-</body></html>
+<section class="panel"><div class="section-title"><div><h2>Chapas cadastradas</h2><p>Uma chapa pode ter vários candidatos.</p></div></div>
+{% if chapas %}<div class="gremio-list">{% for chapa in chapas %}<div class="gremio-item">{% if chapa.logo %}<img class="gremio-foto" src="{{ url_for('uploaded_file', filename=chapa.logo.split('/', 1)[1]) }}" alt="Logo {{ chapa.nome }}">{% else %}<div class="gremio-foto sem-foto">✦</div>{% endif %}<div class="gremio-info"><strong>{{ chapa.nome }}</strong><p>{{ chapa.descricao or "Sem descrição." }} · {{ candidatos|selectattr("chapa_id", "equalto", chapa.id)|list|length }} candidato(s)</p></div>{% if candidatos|selectattr("chapa_id", "equalto", chapa.id)|list|length == 0 %}<form method="post" action="{{ url_for('excluir_chapa', chapa_id=chapa.id) }}" onsubmit="return confirm('Excluir a chapa {{ chapa.nome|e }}?')"><button type="submit" class="delete-btn">Excluir</button></form>{% else %}<span class="locked-delete">Em uso</span>{% endif %}</div>{% endfor %}</div>{% else %}<p>Nenhuma chapa cadastrada.</p>{% endif %}
+</section>
+<section class="panel"><h2>Controle da votação</h2><p>Abra ou encerre a votação.</p><form method="post" action="/admin/estado"><input type="hidden" name="aberta" value="{{ 'nao' if data.aberta else 'sim' }}"><button class="submit {{ 'danger' if data.aberta else '' }}">{{ "Encerrar votação" if data.aberta else "Abrir votação" }}</button></form><hr class="divider"><h2>Reiniciar votação</h2><p>Zera os votos individuais e libera os nomes dos eleitores para votar novamente. Os cadastros são mantidos.</p><form method="post" action="/admin/zerar-votos" onsubmit="return confirm('ATENÇÃO: isso apagará todos os votos da votação atual. Deseja continuar?')"><button class="reset-btn" type="submit">Zerar todos os votos</button></form></section>
+<p class="privacy">A verificação por nome ajuda a evitar duplicidade, mas não confirma a identidade do eleitor. Este projeto é um protótipo e precisa de validação adicional para uma eleição oficial.</p></main></body></html>
