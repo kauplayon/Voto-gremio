@@ -1,39 +1,36 @@
 # Vota Grêmio
 
-Sistema de votação estudantil com urna por número de candidato, cadastro de chapas/logos, cadastro individual de candidatos e apuração por pessoa. Feito com Flask e PostgreSQL externo (ou JSON local para desenvolvimento).
+Sistema de votação estudantil com cadastro de chapas/logos, candidatos/cargos/fotos, votação por número, apuração e exportação CSV.
 
-## Executar localmente
-1. Instale o Python 3.
-2. Execute `pip install -r requirements.txt`.
-3. Configure `ADMIN_PASSWORD` (recomendado) e `SECRET_KEY`.
-4. Execute `python app.py`.
-5. Abra `http://127.0.0.1:5000`; painel: `http://127.0.0.1:5000/admin`.
+## Usar no Windows (computador local)
 
-Se `ADMIN_PASSWORD` não estiver configurada, a senha inicial é `admin123`. Troque-a antes de usar.
+Esta é a opção recomendada para usar a votação em apenas um computador. Os dados são salvos no arquivo local `votos.json`, e as imagens ficam na pasta `uploads`. Eles permanecem no computador mesmo depois de fechar o navegador ou reiniciar o PC, desde que esses arquivos e pastas não sejam apagados.
 
-## Como configurar a eleição
+1. Instale o Python 3 para Windows: https://www.python.org/downloads/windows/ . Durante a instalação, marque **Add Python to PATH**.
+2. Baixe o projeto pelo botão **Code > Download ZIP** no GitHub e extraia a pasta para um local fixo do computador.
+3. Dê dois cliques em `iniciar.bat`. Na primeira execução, ele instala as dependências; é necessária conexão com a internet para essa etapa.
+4. Quando o servidor iniciar, abra `http://127.0.0.1:5000` no navegador do mesmo computador.
+5. Para administrar a eleição, abra `http://127.0.0.1:5000/admin`.
+6. Para encerrar, volte à janela preta do `iniciar.bat` e pressione `Ctrl+C`.
+
+**Importante:** não mova nem apague `votos.json` ou a pasta `uploads` depois de cadastrar candidatos ou registrar votos. Para fazer backup, feche o sistema e copie o arquivo `votos.json` e a pasta `uploads` para outro local seguro. Para continuar usando os dados, inicie sempre o projeto pela mesma pasta.
+
+Se `DATABASE_URL` estiver configurada nas variáveis de ambiente do Windows, o programa tentará usar o banco externo. Para o modo local, não configure essa variável; o programa usará `votos.json` e a pasta `uploads`.
+
+## Senhas
+
+Se `ADMIN_PASSWORD` não estiver configurada, a senha inicial é `admin123`. Altere-a antes de usar, definindo a variável de ambiente `ADMIN_PASSWORD`. Também é recomendado definir `SECRET_KEY`.
+
+## Configurar a eleição
+
 1. Entre no painel administrativo.
 2. Cadastre cada chapa e envie o logo.
-3. Cadastre cada candidato com número único, nome completo, chapa e, opcionalmente, foto.
-4. Abra a votação. O eleitor informa seu nome e o número do candidato, confere nome/chapa/logo e confirma.
-5. A apuração mostra os votos de cada candidato separadamente e pode ser exportada em CSV.
+3. Cadastre cada candidato com número único, nome completo, cargo, chapa e, opcionalmente, foto.
+4. Abra a votação. O eleitor informa o nome e o número do candidato, confere os dados e confirma.
+5. Consulte os resultados no painel e exporte em CSV se necessário.
 
-## Armazenamento persistente no Render grátis
+## Observação sobre o modo local
 
-O Render gratuito usa um sistema de arquivos temporário. Para manter chapas, candidatos, cargos, votos, nomes de eleitores, fotos e logos entre reinicializações, configure um PostgreSQL externo.
+O sistema fica acessível em `127.0.0.1` somente no próprio computador. Os alunos precisam votar nesse computador, um por vez. O modo local não sincroniza votos com o site hospedado no Render.
 
-1. Crie um projeto PostgreSQL no Supabase.
-2. No painel do Supabase, abra **Connect** e copie a connection string do **Session pooler** (recomendado para conexão IPv4), substituindo o marcador da senha pela senha do banco.
-3. No painel do Render, abra o serviço do Vota Grêmio e entre em **Environment**.
-4. Adicione a variável `DATABASE_URL` com a connection string completa. Não compartilhe essa URL: ela contém credenciais privadas.
-5. Salve e faça o deploy da versão mais recente.
-6. Na primeira inicialização, o app cria as tabelas necessárias. O estado da eleição e as imagens passam a ser guardados no banco.
-7. Faça um teste cadastrando uma chapa e um candidato; reinicie o serviço e confirme que continuam lá.
-
-Se `DATABASE_URL` não estiver definida, o app usa JSON e arquivos locais para desenvolvimento. O banco externo precisa estar ativo e acessível para o site salvar ou ler dados.
-
-## Migração
-Na primeira execução com o novo código, os antigos grêmios são convertidos em chapas. Os totais antigos ficam preservados em uma seção separada, pois não é possível atribuí-los retroativamente a candidatos individuais. Os votos da nova eleição começam em zero; os nomes de eleitores já usados continuam bloqueados até que o responsável zere a votação.
-
-## Limitações importantes
-A verificação por nome não comprova a identidade do eleitor e pode ser contornada por outra pessoa. Este projeto é um protótipo; uma eleição oficial requer identificação validada, regras de auditoria, proteção de dados e testes de segurança.
+A verificação por nome não comprova a identidade do eleitor. Este projeto é um protótipo; uma eleição oficial requer identificação validada, regras de auditoria, proteção de dados e testes de segurança.
