@@ -1,4 +1,4 @@
-import json, os, unicodedata, uuid, csv, io
+import json, os, unicodedata, uuid, csv, io, shutil
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, session, flash, Response, send_from_directory
 from werkzeug.utils import secure_filename
@@ -29,31 +29,44 @@ def save_data(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
     os.replace(temp, DATA_FILE)
 
+def migrate_old_schema(previous):
+    if "candidatos" in previous:
+        return previous
+    chapas = []
+    for gremio in previous.get("gremios", []):
+        logo = gremio.get("foto", "")
+        if logo:
+            old_path = os.path.join(os.path.dirname(__file__), "static", logo)
+            new_path = os.path.join(DATA_DIR, logo)
+            if os.path.isfile(old_path) and os.path.abspath(old_path) != os.path.abspath(new_path):
+                os.makedirs(os.path.dirname(new_path), exist_ok=True)
+                if not os.path.exists(new_path):
+                    shutil.copy2(old_path, new_path)
+        chapas.append({
+            "id": gremio["id"], "nome": gremio["nome"],
+            "descricao": gremio.get("descricao", ""),
+            "logo": logo, "emoji": gremio.get("emoji", "🎓")
+        })
+    return {
+        "aberta": previous.get("aberta", True),
+        "chapas": chapas, "candidatos": [],
+        "votos": {}, "nomes_votantes": previous.get("nomes_votantes", []),
+        "votos_legados": previous.get("votos", {})
+    }
+
 def load_data():
     os.makedirs(DATA_DIR, exist_ok=True)
-    if not os.path.exists(DATA_FILE) and os.path.exists(LEGACY_DATA_FILE):
+    if not os.path.exists(DATA_FILE) and os.path.abspath(DATA_FILE) != os.path.abspath(LEGACY_DATA_FILE) and os.path.exists(LEGACY_DATA_FILE):
         with open(LEGACY_DATA_FILE, "r", encoding="utf-8") as old:
             previous = json.load(old)
-        if "candidatos" not in previous:
-            # Preserve os antigos grêmios e totais, sem atribuir votos antigos a pessoas.
-            chapas = []
-            for gremio in previous.get("gremios", []):
-                chapas.append({
-                    "id": gremio["id"], "nome": gremio["nome"],
-                    "descricao": gremio.get("descricao", ""),
-                    "logo": gremio.get("foto", ""), "emoji": gremio.get("emoji", "🎓")
-                })
-            previous = {
-                "aberta": previous.get("aberta", True),
-                "chapas": chapas, "candidatos": [],
-                "votos": {}, "nomes_votantes": previous.get("nomes_votantes", []),
-                "votos_legados": previous.get("votos", {})
-            }
-        save_data(previous)
+        save_data(migrate_old_schema(previous))
     if not os.path.exists(DATA_FILE):
         save_data(DEFAULT)
     with open(DATA_FILE, "r", encoding="utf-8") as f:
         data = json.load(f)
+    if "candidatos" not in data:
+        data = migrate_old_schema(data)
+        save_data(data)
     data.setdefault("chapas", [])
     data.setdefault("candidatos", [])
     data.setdefault("votos", {})
