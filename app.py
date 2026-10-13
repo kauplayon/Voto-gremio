@@ -1,4 +1,4 @@
-import json, os, unicodedata, uuid
+import json, os, unicodedata, uuid, csv, io
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, session, flash, Response, send_from_directory
 from werkzeug.utils import secure_filename
@@ -7,8 +7,6 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "troque-esta-chave-antes-de-usar")
 app.config["MAX_CONTENT_LENGTH"] = 4 * 1024 * 1024
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
-# No Render, configure um Persistent Disk montado em /var/data e DATA_DIR=/var/data.
-# Assim, votos, gremios e fotos ficam fora da pasta temporaria do deploy.
 DATA_DIR = os.environ.get("DATA_DIR", os.path.dirname(__file__))
 DATA_FILE = os.path.join(DATA_DIR, "votos.json")
 UPLOAD_FOLDER = os.path.join(DATA_DIR, "uploads")
@@ -17,31 +15,52 @@ ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 
 DEFAULT = {
     "aberta": True,
-    "gremios": [
-        {"id": 1, "nome": "Grêmio Renovação", "descricao": "Juntos por uma escola melhor.", "emoji": "🌱"},
-        {"id": 2, "nome": "Grêmio União", "descricao": "Mais participação para todos.", "emoji": "🤝"},
-        {"id": 3, "nome": "Grêmio Futuro", "descricao": "Novas ideias, novas conquistas.", "emoji": "🚀"}
-    ],
+    "chapas": [],
+    "candidatos": [],
     "votos": {},
-    "nomes_votantes": []
+    "nomes_votantes": [],
+    "votos_legados": {}
 }
 
-def load_data():
-    os.makedirs(DATA_DIR, exist_ok=True)
-    # Migra os dados antigos na primeira inicializacao, se o arquivo ainda existir.
-    if not os.path.exists(DATA_FILE) and os.path.exists(LEGACY_DATA_FILE):
-        with open(LEGACY_DATA_FILE, "r", encoding="utf-8") as antigo:
-            save_data(json.load(antigo))
-    if not os.path.exists(DATA_FILE):
-        save_data(DEFAULT)
-    with open(DATA_FILE, "r", encoding="utf-8") as f:
-        return json.load(f)
-
 def save_data(data):
+    os.makedirs(DATA_DIR, exist_ok=True)
     temp = DATA_FILE + ".tmp"
     with open(temp, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     os.replace(temp, DATA_FILE)
+
+def load_data():
+    os.makedirs(DATA_DIR, exist_ok=True)
+    if not os.path.exists(DATA_FILE) and os.path.exists(LEGACY_DATA_FILE):
+        with open(LEGACY_DATA_FILE, "r", encoding="utf-8") as old:
+            previous = json.load(old)
+        if "candidatos" not in previous:
+            # Preserve os antigos grêmios e totais, sem atribuir votos antigos a pessoas.
+            chapas = []
+            for gremio in previous.get("gremios", []):
+                chapas.append({
+                    "id": gremio["id"], "nome": gremio["nome"],
+                    "descricao": gremio.get("descricao", ""),
+                    "logo": gremio.get("foto", ""), "emoji": gremio.get("emoji", "🎓")
+                })
+            previous = {
+                "aberta": previous.get("aberta", True),
+                "chapas": chapas, "candidatos": [],
+                "votos": {}, "nomes_votantes": previous.get("nomes_votantes", []),
+                "votos_legados": previous.get("votos", {})
+            }
+        save_data(previous)
+    if not os.path.exists(DATA_FILE):
+        save_data(DEFAULT)
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    data.setdefault("chapas", [])
+    data.setdefault("candidatos", [])
+    data.setdefault("votos", {})
+    data.setdefault("nomes_votantes", [])
+    data.setdefault("votos_legados", {})
+    data.setdefault("aberta", True)
+    return data
 
 def norm_name(name):
     name = unicodedata.normalize("NFKD", name.strip().casefold())
@@ -55,6 +74,18 @@ def admin_required(fn):
         return fn(*args, **kwargs)
     return wrapper
 
+def save_upload(file, prefix):
+    if not file or not file.filename:
+        return ""
+    original = secure_filename(file.filename)
+    ext = original.rsplit(".", 1)[-1].lower() if "." in original else ""
+    if ext not in ALLOWED_EXTENSIONS:
+        raise ValueError("A imagem deve estar no formato PNG, JPG ou WEBP.")
+    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+    filename = f"{prefix}_{uuid.uuid4().hex}.{ext}"
+    file.save(os.path.join(UPLOAD_FOLDER, filename))
+    return f"uploads/{filename}"
+
 @app.get("/uploads/<path:filename>")
 def uploaded_file(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
@@ -62,29 +93,33 @@ def uploaded_file(filename):
 @app.route("/")
 def index():
     data = load_data()
-    return render_template("index.html", data=data)
+    votos = data["votos"]
+    candidatos = []
+    for c in data["candidatos"]:
+        chapa = next((x for x in data["chapas"] if x["id"] == c["chapa_id"]), None)
+        candidatos.append({**c, "chapa": chapa, "votos": votos.get(str(c["id"]), 0)})
+    return render_template("index.html", data=data, candidatos=candidatos)
 
 @app.post("/votar")
 def votar():
     data = load_data()
-    nome = request.form.get("nome", "").strip()
-    try:
-        gremio_id = int(request.form.get("gremio_id", ""))
-    except ValueError:
-        gremio_id = -1
+    eleitor = request.form.get("eleitor", "").strip()
+    numero = request.form.get("numero", "").strip()
+    candidato = next((c for c in data["candidatos"] if str(c["numero"]) == numero), None)
     if not data["aberta"]:
         flash("A votação está encerrada.")
-    elif len(nome) < 2:
-        flash("Digite seu nome para continuar.")
-    elif not any(g["id"] == gremio_id for g in data["gremios"]):
-        flash("Selecione um grêmio válido.")
-    elif norm_name(nome) in data["nomes_votantes"]:
+    elif len(eleitor) < 2:
+        flash("Informe o nome do eleitor.")
+    elif norm_name(eleitor) in data["nomes_votantes"]:
         flash("Este nome já foi utilizado para votar. Peça ajuda ao responsável pela eleição.")
+    elif not candidato:
+        flash("Número de candidato inválido.")
     else:
-        data["nomes_votantes"].append(norm_name(nome))
-        data["votos"][str(gremio_id)] = data["votos"].get(str(gremio_id), 0) + 1
+        key = str(candidato["id"])
+        data["votos"][key] = data["votos"].get(key, 0) + 1
+        data["nomes_votantes"].append(norm_name(eleitor))
         save_data(data)
-        flash("Voto registrado com sucesso! Obrigado por participar.")
+        flash("Voto registrado com sucesso!")
     return redirect(url_for("index"))
 
 @app.route("/admin", methods=["GET", "POST"])
@@ -102,70 +137,116 @@ def admin_login():
 @admin_required
 def painel():
     data = load_data()
-    gremios = [{**g, "votos": data["votos"].get(str(g["id"]), 0)} for g in data["gremios"]]
-    return render_template("painel.html", data=data, gremios=gremios,
-                           total=sum(g["votos"] for g in gremios))
+    candidatos = []
+    for c in data["candidatos"]:
+        chapa = next((x for x in data["chapas"] if x["id"] == c["chapa_id"]), None)
+        candidatos.append({**c, "chapa": chapa, "votos": data["votos"].get(str(c["id"]), 0)})
+    total = sum(c["votos"] for c in candidatos)
+    return render_template("painel.html", data=data, candidatos=candidatos,
+                           total=total, chapas=data["chapas"])
 
-@app.post("/admin/gremio")
+@app.post("/admin/chapa")
 @admin_required
-def add_gremio():
+def add_chapa():
     nome = request.form.get("nome", "").strip()
     descricao = request.form.get("descricao", "").strip()
-    foto = request.files.get("foto")
     if not nome:
-        flash("Informe o nome do grêmio.")
+        flash("Informe o nome da chapa.")
         return redirect(url_for("painel"))
-    if foto and foto.filename:
-        original = secure_filename(foto.filename)
-        extensao = original.rsplit(".", 1)[-1].lower() if "." in original else ""
-        if extensao not in ALLOWED_EXTENSIONS:
-            flash("A foto deve estar no formato PNG, JPG ou WEBP.")
-            return redirect(url_for("painel"))
-        os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-        nome_arquivo = f"gremio_{uuid.uuid4().hex}.{extensao}"
-        foto.save(os.path.join(UPLOAD_FOLDER, nome_arquivo))
-        caminho_foto = f"uploads/{nome_arquivo}"
-    else:
-        caminho_foto = ""
     data = load_data()
-    next_id = max([g["id"] for g in data["gremios"]] or [0]) + 1
-    data["gremios"].append({"id": next_id, "nome": nome[:70],
-                            "descricao": descricao[:180], "emoji": "🎓",
-                            "foto": caminho_foto})
-    data["votos"][str(next_id)] = 0
+    try:
+        logo = save_upload(request.files.get("logo"), "chapa")
+    except ValueError as e:
+        flash(str(e))
+        return redirect(url_for("painel"))
+    next_id = max([x["id"] for x in data["chapas"]] or [0]) + 1
+    data["chapas"].append({"id": next_id, "nome": nome[:70], "descricao": descricao[:180], "logo": logo, "emoji": "🎓"})
     save_data(data)
-    flash("Grêmio cadastrado com sucesso!")
+    flash("Chapa cadastrada com sucesso!")
     return redirect(url_for("painel"))
 
-@app.post("/admin/gremio/<int:gremio_id>/excluir")
+@app.post("/admin/candidato")
 @admin_required
-def excluir_gremio(gremio_id):
+def add_candidato():
+    numero = request.form.get("numero", "").strip()
+    nome = request.form.get("nome", "").strip()
+    try:
+        chapa_id = int(request.form.get("chapa_id", ""))
+    except ValueError:
+        chapa_id = -1
     data = load_data()
-    gremio = next((g for g in data["gremios"] if g["id"] == gremio_id), None)
-    if gremio is None:
-        flash("Grêmio não encontrado.")
-    elif data["votos"].get(str(gremio_id), 0) > 0:
-        flash("Não é possível excluir um grêmio que já recebeu votos.")
+    if not numero.isdigit() or not 1 <= len(numero) <= 6:
+        flash("Use um número de candidato com 1 a 6 dígitos.")
+        return redirect(url_for("painel"))
+    if any(str(c["numero"]) == numero for c in data["candidatos"]):
+        flash("Esse número já está cadastrado para outro candidato.")
+        return redirect(url_for("painel"))
+    if len(nome) < 2:
+        flash("Informe o nome completo do candidato.")
+        return redirect(url_for("painel"))
+    if not any(x["id"] == chapa_id for x in data["chapas"]):
+        flash("Cadastre ou selecione uma chapa válida.")
+        return redirect(url_for("painel"))
+    try:
+        foto = save_upload(request.files.get("foto"), "candidato")
+    except ValueError as e:
+        flash(str(e))
+        return redirect(url_for("painel"))
+    next_id = max([c["id"] for c in data["candidatos"]] or [0]) + 1
+    data["candidatos"].append({"id": next_id, "numero": numero, "nome": nome[:100], "chapa_id": chapa_id, "foto": foto})
+    data["votos"][str(next_id)] = 0
+    save_data(data)
+    flash("Candidato cadastrado com sucesso!")
+    return redirect(url_for("painel"))
+
+@app.post("/admin/candidato/<int:candidato_id>/excluir")
+@admin_required
+def excluir_candidato(candidato_id):
+    data = load_data()
+    candidato = next((c for c in data["candidatos"] if c["id"] == candidato_id), None)
+    if candidato is None:
+        flash("Candidato não encontrado.")
+    elif data["votos"].get(str(candidato_id), 0) > 0:
+        flash("Não é possível excluir um candidato que já recebeu votos. Zere os votos primeiro.")
     else:
-        data["gremios"] = [g for g in data["gremios"] if g["id"] != gremio_id]
-        data["votos"].pop(str(gremio_id), None)
-        foto = gremio.get("foto", "")
-        if foto:
-            caminho = os.path.join(DATA_DIR, foto)
-            if os.path.isfile(caminho):
-                os.remove(caminho)
+        data["candidatos"] = [c for c in data["candidatos"] if c["id"] != candidato_id]
+        data["votos"].pop(str(candidato_id), None)
+        if candidato.get("foto"):
+            path = os.path.join(DATA_DIR, candidato["foto"])
+            if os.path.isfile(path):
+                os.remove(path)
         save_data(data)
-        flash("Grêmio excluído com sucesso.")
+        flash("Candidato excluído.")
+    return redirect(url_for("painel"))
+
+@app.post("/admin/chapa/<int:chapa_id>/excluir")
+@admin_required
+def excluir_chapa(chapa_id):
+    data = load_data()
+    chapa = next((x for x in data["chapas"] if x["id"] == chapa_id), None)
+    if chapa is None:
+        flash("Chapa não encontrada.")
+    elif any(c["chapa_id"] == chapa_id for c in data["candidatos"]):
+        flash("Não é possível excluir uma chapa que tem candidatos cadastrados.")
+    else:
+        data["chapas"] = [x for x in data["chapas"] if x["id"] != chapa_id]
+        if chapa.get("logo"):
+            path = os.path.join(DATA_DIR, chapa["logo"])
+            if os.path.isfile(path):
+                os.remove(path)
+        save_data(data)
+        flash("Chapa excluída.")
     return redirect(url_for("painel"))
 
 @app.post("/admin/zerar-votos")
 @admin_required
 def zerar_votos():
     data = load_data()
-    data["votos"] = {str(g["id"]): 0 for g in data["gremios"]}
+    data["votos"] = {str(c["id"]): 0 for c in data["candidatos"]}
     data["nomes_votantes"] = []
+    data["votos_legados"] = {}
     save_data(data)
-    flash("Votos zerados. Os alunos poderão votar novamente.")
+    flash("Votos zerados. Os eleitores poderão votar novamente.")
     return redirect(url_for("painel"))
 
 @app.post("/admin/estado")
@@ -181,11 +262,14 @@ def estado():
 @admin_required
 def exportar():
     data = load_data()
-    linhas = ["Grêmio,Votos"]
-    for g in data["gremios"]:
-        linhas.append('"' + g["nome"].replace('"', '""') + '",' + str(data["votos"].get(str(g["id"]), 0)))
-    return Response("\ufeff" + "\n".join(linhas), mimetype="text/csv",
-                    headers={"Content-Disposition": "attachment; filename=resultados_gremio.csv"})
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Número", "Candidato", "Chapa", "Votos"])
+    for c in data["candidatos"]:
+        chapa = next((x for x in data["chapas"] if x["id"] == c["chapa_id"]), None)
+        writer.writerow([c["numero"], c["nome"], chapa["nome"] if chapa else "", data["votos"].get(str(c["id"]), 0)])
+    return Response("\ufeff" + output.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=resultados_candidatos.csv"})
 
 @app.get("/sair")
 def sair():
