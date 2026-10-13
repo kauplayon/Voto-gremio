@@ -206,7 +206,7 @@ def add_candidato():
         flash(str(e))
         return redirect(url_for("painel"))
     next_id = max([c["id"] for c in data["candidatos"]] or [0]) + 1
-    data["candidatos"].append({"id": next_id, "numero": numero, "nome": nome[:100], "chapa_id": chapa_id, "foto": foto})
+    data["candidatos"].append({"id": next_id, "numero": numero, "nome": nome[:100], "cargo": request.form.get("cargo", "").strip()[:80], "chapa_id": chapa_id, "foto": foto})
     data["votos"][str(next_id)] = 0
     save_data(data)
     flash("Candidato cadastrado com sucesso!")
