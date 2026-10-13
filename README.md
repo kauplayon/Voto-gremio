@@ -1,23 +1,28 @@
 # Vota Grêmio
 
-Aplicação de votação estudantil feita com Flask e arquivo JSON.
+Sistema de votação estudantil com urna por número de candidato, cadastro de chapas/logos, cadastro individual de candidatos e apuração por pessoa. Feito com Flask e JSON.
 
 ## Executar localmente
 1. Instale o Python 3.
-2. No terminal, dentro da pasta do projeto, execute: `pip install -r requirements.txt`
-3. Defina uma senha de administrador (recomendado):
-   - Windows PowerShell: `$env:ADMIN_PASSWORD="sua-senha"`
-   - macOS/Linux: `export ADMIN_PASSWORD="sua-senha"`
-4. Execute: `python app.py`
-5. Abra `http://127.0.0.1:5000` no navegador.
-6. Painel administrativo: `http://127.0.0.1:5000/admin`
+2. Execute `pip install -r requirements.txt`.
+3. Configure `ADMIN_PASSWORD` (recomendado) e `SECRET_KEY`.
+4. Execute `python app.py`.
+5. Abra `http://127.0.0.1:5000`; painel: `http://127.0.0.1:5000/admin`.
 
-A senha inicial, se não configurar ADMIN_PASSWORD, é `admin123` (troque antes de usar).
+Se `ADMIN_PASSWORD` não estiver configurada, a senha inicial é `admin123`. Troque-a antes de usar.
 
-Os dados ficam em `votos.json`, criado automaticamente. Faça cópias de segurança.
+## Como configurar a eleição
+1. Entre no painel administrativo.
+2. Cadastre cada chapa e envie o logo.
+3. Cadastre cada candidato com número único, nome completo, chapa e, opcionalmente, foto.
+4. Abra a votação. O eleitor informa seu nome e o número do candidato, confere nome/chapa/logo e confirma.
+5. A apuração mostra os votos de cada candidato separadamente e pode ser exportada em CSV.
 
-## Limitações
-Este é um protótipo para demonstração/testes. A identificação por nome não comprova a identidade do aluno: nomes podem ser repetidos ou usados por outra pessoa. O arquivo local também pode ser alterado por quem tiver acesso ao computador. Não use como sistema oficial sem validação, supervisão e medidas adicionais de segurança e privacidade.
+## Armazenamento no Render
+Configure um Persistent Disk montado em `/var/data` e a variável `DATA_DIR=/var/data`. Isso preserva o JSON e as imagens entre deploys. Se não houver disco persistente, arquivos locais podem ser perdidos ao reiniciar ou publicar uma nova versão.
 
-## Hospedagem
-O arquivo JSON pode ser apagado em reinicializações ou novos deploys em serviços de hospedagem. Para preservar votos online, será necessário configurar armazenamento persistente ou um banco de dados.
+## Migração
+Na primeira execução com o novo código, os antigos grêmios são convertidos em chapas. Os totais antigos ficam preservados em uma seção separada, pois não é possível atribuí-los retroativamente a candidatos individuais. Os votos da nova eleição começam em zero; os nomes de eleitores já usados continuam bloqueados até que o responsável zere a votação.
+
+## Limitações importantes
+A verificação por nome não comprova a identidade do eleitor e pode ser contornada por outra pessoa. Este projeto é um protótipo; uma eleição oficial requer identificação validada, regras de auditoria, proteção de dados e testes de segurança.
