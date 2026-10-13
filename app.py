@@ -1,6 +1,9 @@
-import json, os, unicodedata, uuid, csv, io, shutil
+import json, os, unicodedata, uuid, csv, io, shutil, mimetypes
 from functools import wraps
-from flask import Flask, render_template, request, redirect, url_for, session, flash, Response, send_from_directory
+from io import BytesIO
+import psycopg
+from psycopg.types.json import Jsonb
+from flask import Flask, render_template, request, redirect, url_for, session, flash, Response, send_from_directory, send_file
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
@@ -9,6 +12,7 @@ app.config["MAX_CONTENT_LENGTH"] = 4 * 1024 * 1024
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 DATA_DIR = os.environ.get("DATA_DIR", os.path.dirname(__file__))
 DATA_FILE = os.path.join(DATA_DIR, "votos.json")
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 UPLOAD_FOLDER = os.path.join(DATA_DIR, "uploads")
 LEGACY_DATA_FILE = os.path.join(os.path.dirname(__file__), "votos.json")
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
@@ -22,7 +26,34 @@ DEFAULT = {
     "votos_legados": {}
 }
 
+def ensure_database():
+    if not DATABASE_URL:
+        return
+    with psycopg.connect(DATABASE_URL, sslmode="require", connect_timeout=10) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS vota_state (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                data JSONB NOT NULL
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS vota_uploads (
+                filename TEXT PRIMARY KEY,
+                content BYTEA NOT NULL,
+                mimetype TEXT NOT NULL
+            )
+        """)
+
 def save_data(data):
+    if DATABASE_URL:
+        ensure_database()
+        with psycopg.connect(DATABASE_URL, sslmode="require", connect_timeout=10) as conn:
+            conn.execute(
+                "INSERT INTO vota_state (id, data) VALUES (1, %s) "
+                "ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data",
+                (Jsonb(data),)
+            )
+        return
     os.makedirs(DATA_DIR, exist_ok=True)
     temp = DATA_FILE + ".tmp"
     with open(temp, "w", encoding="utf-8") as f:
@@ -56,17 +87,36 @@ def migrate_old_schema(previous):
 
 def load_data():
     os.makedirs(DATA_DIR, exist_ok=True)
-    if not os.path.exists(DATA_FILE) and os.path.abspath(DATA_FILE) != os.path.abspath(LEGACY_DATA_FILE) and os.path.exists(LEGACY_DATA_FILE):
-        with open(LEGACY_DATA_FILE, "r", encoding="utf-8") as old:
-            previous = json.load(old)
-        save_data(migrate_old_schema(previous))
-    if not os.path.exists(DATA_FILE):
-        save_data(DEFAULT)
-    with open(DATA_FILE, "r", encoding="utf-8") as f:
-        data = json.load(f)
-    if "candidatos" not in data:
-        data = migrate_old_schema(data)
-        save_data(data)
+    if DATABASE_URL:
+        ensure_database()
+        with psycopg.connect(DATABASE_URL, sslmode="require", connect_timeout=10) as conn:
+            row = conn.execute("SELECT data FROM vota_state WHERE id = 1").fetchone()
+        if row:
+            data = row[0]
+        else:
+            source = DATA_FILE
+            if not os.path.exists(source) and os.path.abspath(DATA_FILE) != os.path.abspath(LEGACY_DATA_FILE):
+                source = LEGACY_DATA_FILE
+            if os.path.exists(source):
+                with open(source, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                data = migrate_old_schema(data)
+                import_local_uploads(data)
+            else:
+                data = dict(DEFAULT)
+            save_data(data)
+    else:
+        if not os.path.exists(DATA_FILE) and os.path.abspath(DATA_FILE) != os.path.abspath(LEGACY_DATA_FILE) and os.path.exists(LEGACY_DATA_FILE):
+            with open(LEGACY_DATA_FILE, "r", encoding="utf-8") as old:
+                previous = json.load(old)
+            save_data(migrate_old_schema(previous))
+        if not os.path.exists(DATA_FILE):
+            save_data(DEFAULT)
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if "candidatos" not in data:
+            data = migrate_old_schema(data)
+            save_data(data)
     data.setdefault("chapas", [])
     data.setdefault("candidatos", [])
     data.setdefault("votos", {})
@@ -74,6 +124,28 @@ def load_data():
     data.setdefault("votos_legados", {})
     data.setdefault("aberta", True)
     return data
+
+def import_local_uploads(data):
+    if not DATABASE_URL:
+        return
+    paths = [c.get("foto", "") for c in data.get("candidatos", [])]
+    paths += [ch.get("logo", "") for ch in data.get("chapas", [])]
+    for relpath in paths:
+        if not relpath or not relpath.startswith("uploads/"):
+            continue
+        filename = os.path.basename(relpath)
+        local_path = os.path.join(DATA_DIR, relpath)
+        if not os.path.isfile(local_path):
+            continue
+        with open(local_path, "rb") as f:
+            content = f.read()
+        mimetype = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        with psycopg.connect(DATABASE_URL, sslmode="require", connect_timeout=10) as conn:
+            conn.execute(
+                "INSERT INTO vota_uploads (filename, content, mimetype) VALUES (%s, %s, %s) "
+                "ON CONFLICT (filename) DO NOTHING",
+                (filename, content, mimetype)
+            )
 
 def norm_name(name):
     name = unicodedata.normalize("NFKD", name.strip().casefold())
@@ -96,11 +168,44 @@ def save_upload(file, prefix):
         raise ValueError("A imagem deve estar no formato PNG, JPG ou WEBP.")
     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
     filename = f"{prefix}_{uuid.uuid4().hex}.{ext}"
-    file.save(os.path.join(UPLOAD_FOLDER, filename))
+    if DATABASE_URL:
+        content = file.read()
+        mimetype = mimetypes.guess_type(filename)[0] or "application/octet-stream"
+        ensure_database()
+        with psycopg.connect(DATABASE_URL, sslmode="require", connect_timeout=10) as conn:
+            conn.execute(
+                "INSERT INTO vota_uploads (filename, content, mimetype) VALUES (%s, %s, %s)",
+                (filename, content, mimetype)
+            )
+    else:
+        file.save(os.path.join(UPLOAD_FOLDER, filename))
     return f"uploads/{filename}"
+
+def delete_upload(relpath):
+    if not relpath:
+        return
+    filename = os.path.basename(relpath)
+    if DATABASE_URL and relpath.startswith("uploads/"):
+        ensure_database()
+        with psycopg.connect(DATABASE_URL, sslmode="require", connect_timeout=10) as conn:
+            conn.execute("DELETE FROM vota_uploads WHERE filename = %s", (filename,))
+        return
+    path = os.path.join(DATA_DIR, relpath)
+    if os.path.isfile(path):
+        os.remove(path)
 
 @app.get("/uploads/<path:filename>")
 def uploaded_file(filename):
+    if DATABASE_URL:
+        ensure_database()
+        with psycopg.connect(DATABASE_URL, sslmode="require", connect_timeout=10) as conn:
+            row = conn.execute(
+                "SELECT content, mimetype FROM vota_uploads WHERE filename = %s",
+                (os.path.basename(filename),)
+            ).fetchone()
+        if row:
+            return send_file(BytesIO(bytes(row[0])), mimetype=row[1], download_name=os.path.basename(filename))
+        return "Imagem não encontrada", 404
     return send_from_directory(UPLOAD_FOLDER, filename)
 
 @app.route("/")
@@ -224,10 +329,7 @@ def excluir_candidato(candidato_id):
     else:
         data["candidatos"] = [c for c in data["candidatos"] if c["id"] != candidato_id]
         data["votos"].pop(str(candidato_id), None)
-        if candidato.get("foto"):
-            path = os.path.join(DATA_DIR, candidato["foto"])
-            if os.path.isfile(path):
-                os.remove(path)
+        delete_upload(candidato.get("foto", ""))
         save_data(data)
         flash("Candidato excluído.")
     return redirect(url_for("painel"))
@@ -243,10 +345,7 @@ def excluir_chapa(chapa_id):
         flash("Não é possível excluir uma chapa que tem candidatos cadastrados.")
     else:
         data["chapas"] = [x for x in data["chapas"] if x["id"] != chapa_id]
-        if chapa.get("logo"):
-            path = os.path.join(DATA_DIR, chapa["logo"])
-            if os.path.isfile(path):
-                os.remove(path)
+        delete_upload(chapa.get("logo", ""))
         save_data(data)
         flash("Chapa excluída.")
     return redirect(url_for("painel"))
