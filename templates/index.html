@@ -1,45 +1,62 @@
-<!doctype html><html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vota Grêmio</title><link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}"><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head><body>
+<!doctype html>
+<html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vota Grêmio</title><link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}"><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head>
+<body>
 <header class="top"><div class="brand"><span class="brand-icon">✦</span> Vota Grêmio</div><a class="admin-link" href="/admin">Área administrativa ↗</a></header>
-<main class="wrap"><section class="hero"><div class="eyebrow">ELEIÇÃO ESTUDANTIL</div><h1>Sua voz, sua escola.<br><span>Seu voto faz a diferença.</span></h1><p>Escolha o grêmio que você acredita que pode representar os estudantes.</p></section>
+<main class="wrap ballot-wrap">
+<section class="hero"><div class="eyebrow">ELEIÇÃO ESTUDANTIL</div><h1>Sua voz, sua escola.<br><span>Seu voto faz a diferença.</span></h1><p>Digite o número do candidato e confira os dados antes de confirmar.</p></section>
 {% with messages = get_flashed_messages() %}{% if messages %}<div class="notice">{{ messages[-1] }}</div>{% endif %}{% endwith %}
 {% if data.aberta %}
-<form method="post" action="/votar" id="voteForm"><label class="field-label" for="nome">Primeiro, digite seu nome</label><input id="nome" name="nome" type="text" maxlength="100" placeholder="Ex.: Maria Silva" autocomplete="off" required>
-<div class="section-title"><div><h2>Escolha seu grêmio</h2><p>Selecione apenas uma opção.</p></div><span class="pill">VOTAÇÃO ABERTA</span></div>
-<div class="cards">{% for g in data.gremios %}<label class="card"><input type="radio" name="gremio_id" value="{{ g.id }}" required><span class="radio"></span>{% if g.foto %}<img class="candidate-foto" src="{{ url_for('uploaded_file', filename=g.foto.split('/', 1)[1]) }}" alt="Foto de {{ g.nome }}">{% else %}<span class="emoji">{{ g.emoji }}</span>{% endif %}<span class="card-text"><strong>{{ g.nome }}</strong><small>{{ g.descricao }}</small></span><span class="choose">Selecionar</span></label>{% endfor %}</div>
-<button class="submit" type="button" id="openConfirm">Confirmar meu voto <span>→</span></button><p class="privacy">🔒 Seu voto é registrado uma única vez neste computador.</p></form>
-{% else %}<div class="closed"><span>🔒</span><h2>Votação encerrada</h2><p>Obrigado pela participação!</p></div>{% endif %}
-</main><div class="confirm-overlay" id="confirmOverlay" aria-hidden="true">
-  <div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
-    <div class="confirm-icon">?</div>
-    <h2 id="confirmTitle">Certeza do seu voto?</h2>
-    <p>Depois de confirmar, não será possível votar novamente com este nome.</p>
-    <div class="confirm-actions">
-      <button type="button" class="confirm-cancel" id="cancelConfirm">Voltar</button>
-      <button type="button" class="confirm-yes" id="yesConfirm">Sim, confirmar voto</button>
-    </div>
-  </div>
+{% if candidatos %}
+<form method="post" action="/votar" id="voteForm" class="ballot-form">
+<label class="field-label" for="eleitor">Nome do eleitor</label><input id="eleitor" name="eleitor" type="text" maxlength="100" placeholder="Digite seu nome completo" autocomplete="off" required>
+<label class="field-label" for="numero">Número do candidato</label>
+<div class="number-entry"><input id="numero" name="numero" type="text" inputmode="numeric" pattern="[0-9]{1,6}" maxlength="6" placeholder="Ex.: 12" autocomplete="off" required><span class="keypad-hint">Até 6 dígitos</span></div>
+<div class="candidate-preview" id="candidatePreview" aria-live="polite">
+<div class="preview-placeholder"><span class="preview-question">?</span><strong>Digite um número</strong><small>Os dados do candidato aparecerão aqui.</small></div>
 </div>
+<button class="submit" type="button" id="openConfirm">Confirmar meu voto <span>→</span></button>
+<p class="privacy">Confira o nome e a chapa antes de confirmar seu voto.</p>
+</form>
+{% else %}
+<div class="closed"><span>🗳️</span><h2>Nenhum candidato cadastrado</h2><p>O responsável precisa cadastrar as chapas e os candidatos no painel administrativo antes de abrir a votação.</p></div>
+{% endif %}
+{% else %}<div class="closed"><span>🔒</span><h2>Votação encerrada</h2><p>Obrigado pela participação!</p></div>{% endif %}
+</main>
+<div class="confirm-overlay" id="confirmOverlay" aria-hidden="true"><div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="confirmTitle"><div class="confirm-icon">?</div><h2 id="confirmTitle">Certeza do seu voto?</h2><p>Depois de confirmar, não será possível votar novamente com este nome.</p><div class="confirm-actions"><button type="button" class="confirm-cancel" id="cancelConfirm">Voltar</button><button type="button" class="confirm-yes" id="yesConfirm">Sim, confirmar voto</button></div></div></div>
 <footer>Participação estudantil começa com a sua voz.</footer>
 <script>
+const candidates = {{ candidatos|tojson }};
+const numberInput = document.getElementById('numero');
+const preview = document.getElementById('candidatePreview');
 const voteForm = document.getElementById('voteForm');
 const overlay = document.getElementById('confirmOverlay');
+let selectedCandidate = null;
+function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch])); }
+function imageUrl(path) { return path ? '/uploads/' + encodeURIComponent(path.split('/').pop()) : ''; }
+function renderCandidate() {
+  if (!numberInput || !preview) return;
+  const number = numberInput.value.trim();
+  selectedCandidate = candidates.find(c => String(c.numero) === number) || null;
+  if (!number) {
+    preview.innerHTML = '<div class="preview-placeholder"><span class="preview-question">?</span><strong>Digite um número</strong><small>Os dados do candidato aparecerão aqui.</small></div>';
+  } else if (!selectedCandidate) {
+    preview.innerHTML = '<div class="preview-placeholder invalid"><span class="preview-question">!</span><strong>Candidato não encontrado</strong><small>Confira o número digitado.</small></div>';
+  } else {
+    const chapa = selectedCandidate.chapa || {};
+    const logo = imageUrl(chapa.logo);
+    const foto = imageUrl(selectedCandidate.foto);
+    preview.innerHTML = '<div class="preview-top"><span class="candidate-number">' + escapeHtml(selectedCandidate.numero) + '</span><span class="found-label">CANDIDATO ENCONTRADO</span></div><div class="preview-person">' + (foto ? '<img class="candidate-portrait" src="' + foto + '" alt="Foto do candidato">' : '<div class="candidate-portrait portrait-placeholder">👤</div>') + '<div class="preview-name"><small>NOME DO CANDIDATO</small><h2>' + escapeHtml(selectedCandidate.nome) + '</h2></div></div><div class="preview-chapa">' + (logo ? '<img class="chapa-logo" src="' + logo + '" alt="Logo da chapa">' : '<div class="chapa-logo logo-placeholder">✦</div>') + '<div><small>CHAPA</small><strong>' + escapeHtml(chapa.nome || 'Chapa não encontrada') + '</strong>' + (chapa.descricao ? '<span>' + escapeHtml(chapa.descricao) + '</span>' : '') + '</div></div>';
+  }
+}
+numberInput?.addEventListener('input', renderCandidate);
 document.getElementById('openConfirm')?.addEventListener('click', () => {
   if (!voteForm.reportValidity()) return;
-  if (!document.querySelector('input[name="gremio_id"]:checked')) {
-    alert('Selecione um grêmio.');
-    return;
-  }
-  overlay.classList.add('show');
-  overlay.setAttribute('aria-hidden', 'false');
+  renderCandidate();
+  if (!selectedCandidate) { numberInput.focus(); return; }
+  overlay.classList.add('show'); overlay.setAttribute('aria-hidden', 'false');
 });
-function closeConfirm() {
-  overlay.classList.remove('show');
-  overlay.setAttribute('aria-hidden', 'true');
-}
+function closeConfirm() { overlay.classList.remove('show'); overlay.setAttribute('aria-hidden', 'true'); }
 document.getElementById('cancelConfirm')?.addEventListener('click', closeConfirm);
-document.getElementById('yesConfirm')?.addEventListener('click', () => {
-  document.getElementById('yesConfirm').disabled = true;
-  voteForm.submit();
-});
+document.getElementById('yesConfirm')?.addEventListener('click', () => { document.getElementById('yesConfirm').disabled = true; voteForm.submit(); });
 overlay?.addEventListener('click', e => { if (e.target === overlay) closeConfirm(); });
 </script></body></html>
