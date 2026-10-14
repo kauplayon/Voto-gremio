@@ -222,18 +222,11 @@ def index():
         chapa = next((x for x in data["chapas"] if x["id"] == c["chapa_id"]), None)
         candidatos.append({**c, "chapa": chapa, "votos": votos.get(str(c["id"]), 0)})
 
+    nomes_cargos = ["Presidente", "Vice-presidente", "Comunitário", "Convivência", "Artísticos", "Desportivo", "Sustentabilidade", "Comunicação"]
     cargos = []
-    cargo_keys = set()
-    for candidato in candidatos:
-        cargo_nome = (candidato.get("cargo") or "").strip()
-        cargo_key = cargo_nome.casefold()
-        if not cargo_nome:
-            continue
-        if cargo_key not in cargo_keys:
-            cargo_keys.add(cargo_key)
-            cargos.append({"nome": cargo_nome, "candidatos": []})
-        grupo = next(g for g in cargos if g["nome"].casefold() == cargo_key)
-        grupo["candidatos"].append(candidato)
+    for nome_cargo in nomes_cargos:
+        grupo = [c for c in candidatos if (c.get("cargo") or "").strip().casefold() == nome_cargo.casefold()]
+        cargos.append({"nome": nome_cargo, "candidatos": grupo})
     return render_template("index.html", data=data, candidatos=candidatos, cargos=cargos)
 
 @app.post("/votar")
@@ -241,14 +234,7 @@ def votar():
     data = load_data()
     eleitor = request.form.get("eleitor", "").strip()
 
-    cargos = []
-    cargo_keys = set()
-    for candidato in data["candidatos"]:
-        cargo_nome = (candidato.get("cargo") or "").strip()
-        cargo_key = cargo_nome.casefold()
-        if cargo_nome and cargo_key not in cargo_keys:
-            cargo_keys.add(cargo_key)
-            cargos.append(cargo_nome)
+    cargos = ["Presidente", "Vice-presidente", "Comunitário", "Convivência", "Artísticos", "Desportivo", "Sustentabilidade", "Comunicação"]
 
     if not data["aberta"]:
         flash("A votação está encerrada.")
@@ -341,8 +327,9 @@ def add_candidato():
     if not numero.isdigit() or not 1 <= len(numero) <= 6:
         flash("Use um número de candidato com 1 a 6 dígitos.")
         return redirect(url_for("painel"))
-    if any(str(c["numero"]) == numero for c in data["candidatos"]):
-        flash("Esse número já está cadastrado para outro candidato.")
+    cargo = request.form.get("cargo", "").strip()
+    if any(str(c["numero"]) == numero and (c.get("cargo") or "").strip().casefold() == cargo.casefold() for c in data["candidatos"]):
+        flash("Esse número já está cadastrado para outro candidato neste cargo.")
         return redirect(url_for("painel"))
     if len(nome) < 2:
         flash("Informe o nome completo do candidato.")
@@ -356,7 +343,7 @@ def add_candidato():
         flash(str(e))
         return redirect(url_for("painel"))
     next_id = max([c["id"] for c in data["candidatos"]] or [0]) + 1
-    data["candidatos"].append({"id": next_id, "numero": numero, "nome": nome[:100], "cargo": request.form.get("cargo", "").strip()[:80], "chapa_id": chapa_id, "foto": foto})
+    data["candidatos"].append({"id": next_id, "numero": numero, "nome": nome[:100], "cargo": cargo[:80], "chapa_id": chapa_id, "foto": foto})
     data["votos"][str(next_id)] = 0
     save_data(data)
     flash("Candidato cadastrado com sucesso!")
