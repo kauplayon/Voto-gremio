@@ -37,6 +37,7 @@
 <footer>Vota Grêmio · Eleição do Grêmio Estudantil <span>Transparência · Respeito · Democracia</span></footer>
 <script>
 const voteForm=document.getElementById('voteForm');
+voteForm?.addEventListener('submit',e=>{const missing=screens.findIndex((s,i)=>{const id=document.getElementById('selected-'+i).value;return !id||!candidateData.some(c=>String(c.id)===id&&(c.cargo||'').trim().toLocaleLowerCase('pt-BR')===s.dataset.cargo.toLocaleLowerCase('pt-BR'));});if(missing!==-1){e.preventDefault();showCargo(missing);lookup(missing);}});
 const overlay=document.getElementById('confirmOverlay');
 const candidateData={{ candidatos|tojson }};
 const tabs=[...document.querySelectorAll('.cargo-tab')], screens=[...document.querySelectorAll('.cargo-screen')];
@@ -57,7 +58,7 @@ screens.forEach((screen,i)=>{const input=document.getElementById('number-'+i);sc
 document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>{const i=Number(b.dataset.go);if(!document.getElementById('selected-'+current).value){lookup(current);return;}showCargo(i);}));
 document.getElementById('reviewVote')?.addEventListener('click',()=>{if(!voteForm.reportValidity())return;let missing=screens.findIndex((s,i)=>!document.getElementById('selected-'+i).value);if(missing!==-1){showCargo(missing);lookup(missing);return;}const list=document.getElementById('reviewList');list.innerHTML='';screens.forEach((s,i)=>{const c=candidateData.find(x=>String(x.id)===document.getElementById('selected-'+i).value);const row=document.createElement('div');row.className='review-row';const label=document.createElement('strong');label.textContent=s.dataset.cargo;const val=document.createElement('span');val.textContent=c?c.numero+' — '+c.nome:'Não selecionado';row.append(label,val);list.append(row);});document.querySelector('.urn-main').classList.add('reviewing');document.getElementById('reviewBox').hidden=false;});
 document.getElementById('backToBallot')?.addEventListener('click',()=>showCargo(0));
-document.getElementById('openConfirm')?.addEventListener('click',()=>{if(!voteForm.reportValidity())return;overlay.classList.add('show');overlay.setAttribute('aria-hidden','false');});
+document.getElementById('openConfirm')?.addEventListener('click',()=>{if(!voteForm.reportValidity())return;const missing=screens.findIndex((s,i)=>{const id=document.getElementById('selected-'+i).value;return !id||!candidateData.some(c=>String(c.id)===id&&(c.cargo||'').trim().toLocaleLowerCase('pt-BR')===s.dataset.cargo.toLocaleLowerCase('pt-BR'));});if(missing!==-1){closeConfirm();showCargo(missing);lookup(missing);return;}overlay.classList.add('show');overlay.setAttribute('aria-hidden','false');});
 function closeConfirm(){overlay.classList.remove('show');overlay.setAttribute('aria-hidden','true');}
 document.getElementById('cancelConfirm')?.addEventListener('click',closeConfirm);
 document.getElementById('yesConfirm')?.addEventListener('click',()=>{document.getElementById('yesConfirm').disabled=true;voteForm.submit();});
