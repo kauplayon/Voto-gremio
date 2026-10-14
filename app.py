@@ -216,28 +216,68 @@ def index():
     for c in data["candidatos"]:
         chapa = next((x for x in data["chapas"] if x["id"] == c["chapa_id"]), None)
         candidatos.append({**c, "chapa": chapa, "votos": votos.get(str(c["id"]), 0)})
-    return render_template("index.html", data=data, candidatos=candidatos)
+
+    cargos = []
+    cargo_keys = set()
+    for candidato in candidatos:
+        cargo_nome = (candidato.get("cargo") or "").strip()
+        cargo_key = cargo_nome.casefold()
+        if not cargo_nome:
+            continue
+        if cargo_key not in cargo_keys:
+            cargo_keys.add(cargo_key)
+            cargos.append({"nome": cargo_nome, "candidatos": []})
+        grupo = next(g for g in cargos if g["nome"].casefold() == cargo_key)
+        grupo["candidatos"].append(candidato)
+    return render_template("index.html", data=data, candidatos=candidatos, cargos=cargos)
 
 @app.post("/votar")
 def votar():
     data = load_data()
     eleitor = request.form.get("eleitor", "").strip()
-    numero = request.form.get("numero", "").strip()
-    candidato = next((c for c in data["candidatos"] if str(c["numero"]) == numero), None)
+
+    cargos = []
+    cargo_keys = set()
+    for candidato in data["candidatos"]:
+        cargo_nome = (candidato.get("cargo") or "").strip()
+        cargo_key = cargo_nome.casefold()
+        if cargo_nome and cargo_key not in cargo_keys:
+            cargo_keys.add(cargo_key)
+            cargos.append(cargo_nome)
+
     if not data["aberta"]:
         flash("A votação está encerrada.")
     elif len(eleitor) < 2:
         flash("Informe o nome do eleitor.")
     elif norm_name(eleitor) in data["nomes_votantes"]:
         flash("Este nome já foi utilizado para votar. Peça ajuda ao responsável pela eleição.")
-    elif not candidato:
-        flash("Número de candidato inválido.")
+    elif not cargos:
+        flash("Não há cargos com candidatos cadastrados.")
     else:
-        key = str(candidato["id"])
-        data["votos"][key] = data["votos"].get(key, 0) + 1
-        data["nomes_votantes"].append(norm_name(eleitor))
-        save_data(data)
-        flash("Voto registrado com sucesso!")
+        escolhidos = []
+        erro = None
+        for indice, cargo_nome in enumerate(cargos):
+            candidato_id = request.form.get(f"cargo_{indice}", "").strip()
+            candidato = next(
+                (c for c in data["candidatos"]
+                 if str(c["id"]) == candidato_id
+                 and (c.get("cargo") or "").strip().casefold() == cargo_nome.casefold()),
+                None
+            )
+            if not candidato:
+                erro = f"Selecione um candidato para o cargo: {cargo_nome}."
+                break
+            escolhidos.append(candidato)
+
+        if erro:
+            flash(erro)
+        else:
+            for candidato in escolhidos:
+                key = str(candidato["id"])
+                data["votos"][key] = data["votos"].get(key, 0) + 1
+            data["nomes_votantes"].append(norm_name(eleitor))
+            save_data(data)
+            flash("Voto registrado para todos os cargos com sucesso!")
     return redirect(url_for("index"))
 
 @app.route("/admin", methods=["GET", "POST"])
