@@ -1,54 +1,65 @@
 <!doctype html>
 <html lang="pt-br"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Vota Grêmio</title><link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}"><link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"></head>
-<body>
-<header class="top"><div class="brand"><span class="brand-icon">✦</span> Vota Grêmio</div><a class="admin-link" href="/admin">Área administrativa ↗</a></header>
-<main class="wrap ballot-wrap">
-<section class="hero"><div class="eyebrow">ELEIÇÃO ESTUDANTIL</div><h1>Sua voz, sua escola.<br><span>Seu voto faz a diferença.</span></h1><p>Digite o número do candidato e confira os dados antes de confirmar.</p></section>
+<body class="urn-body">
+<header class="top urn-top"><a class="brand urn-brand" href="/"><span class="brand-shield">★<b>GRÊMIO</b></span><span>Vota Grêmio<small>Sua voz faz a diferença!</small></span></a><a class="admin-link" href="/admin">🔒 Área restrita</a></header>
+<main class="wrap urn-wrap">
+<section class="urn-hero"><h1>Escolha seus candidatos</h1><p>Vote em cada cargo separadamente, digitando o número do candidato da sua preferência.</p></section>
 {% with messages = get_flashed_messages() %}{% if messages %}<div class="notice">{{ messages[-1] }}</div>{% endif %}{% endwith %}
-{% if data.aberta %}
-{% if cargos %}
-<form method="post" action="/votar" id="voteForm" class="ballot-form">
+{% if not data.aberta %}<div class="closed"><span>🔒</span><h2>Votação encerrada</h2><p>Obrigado pela participação!</p></div>
+{% elif cargos %}
+<form method="post" action="/votar" id="voteForm" class="urn-form">
 <label class="field-label" for="eleitor">Nome do eleitor</label><input id="eleitor" name="eleitor" type="text" maxlength="100" placeholder="Digite seu nome completo" autocomplete="off" required>
-<p class="privacy">Escolha um candidato para cada cargo. Todos os cargos são obrigatórios.</p>
-{% for cargo in cargos %}
-{% set cargo_index = loop.index0 %}
-<section class="candidate-preview cargo-vote">
-<div class="preview-top"><strong>{{ cargo.nome }}</strong><span class="found-label">{{ cargo.candidatos|length }} candidato(s)</span></div>
-{% for c in cargo.candidatos %}
-<label class="preview-chapa cargo-option">
-<input class="cargo-radio" type="radio" name="cargo_{{ cargo_index }}" value="{{ c.id }}" required>
-{% if c.foto %}<img class="candidate-portrait" src="{{ url_for('uploaded_file', filename=c.foto.split('/', 1)[1]) }}" alt="Foto de {{ c.nome }}">{% else %}<span class="candidate-portrait portrait-placeholder">👤</span>{% endif %}
-<span class="preview-name"><strong>{{ c.nome }}</strong><small>Nº {{ c.numero }} · {{ c.chapa.nome if c.chapa else "Sem chapa" }}</small></span>
-</label>
+<nav class="cargo-tabs" aria-label="Cargos da eleição">{% for cargo in cargos %}<button type="button" class="cargo-tab {{ 'active' if loop.first else '' }}" data-tab="{{ loop.index0 }}"><span>♙</span>{{ cargo.nome }}</button>{% endfor %}</nav>
+{% for cargo in cargos %}<input type="hidden" name="cargo_{{ loop.index0 }}" id="selected-{{ loop.index0 }}" value="">
 {% endfor %}
+<div class="urn-layout">
+<section class="urn-main">
+{% for cargo in cargos %}<div class="cargo-screen {{ 'active' if loop.first else '' }}" data-screen="{{ loop.index0 }}" data-cargo="{{ cargo.nome }}">
+<div class="cargo-heading"><div class="cargo-avatar">♙</div><div><h2>{{ cargo.nome }}</h2><p>Digite o número do candidato para {{ cargo.nome }}.</p></div></div>
+<div class="urn-instruction">▣ Digite o número (ex.: 01, 02, 03...) e confirme.</div>
+<div class="urn-workarea">
+<div class="keypad-card"><label class="field-label" for="number-{{ loop.index0 }}">Número do candidato</label><input class="urn-number" id="number-{{ loop.index0 }}" inputmode="numeric" maxlength="6" placeholder="Digite o número" readonly aria-label="Número do candidato para {{ cargo.nome }}">
+<div class="keypad" data-keypad="{{ loop.index0 }}">{% for n in ['1','2','3','4','5','6','7','8','9'] %}<button type="button" class="key" data-digit="{{ n }}">{{ n }}</button>{% endfor %}<span class="key-spacer"></span><button type="button" class="key" data-digit="0">0</button><button type="button" class="key key-delete" data-action="delete">⌫</button></div>
+<div class="key-actions"><button type="button" class="key-clear" data-action="clear">Limpar</button><button type="button" class="key-confirm" data-action="check">Confirmar número</button></div>
+<div class="number-status" aria-live="polite">Digite o número para consultar o candidato.</div></div>
+<div class="candidate-card" id="candidate-{{ loop.index0 }}"><div class="candidate-empty"><span>?</span><strong>Quem será seu candidato?</strong><small>O candidato aparecerá aqui após digitar um número válido.</small></div></div>
+</div>
+<div class="cargo-navigation">{% if not loop.first %}<button type="button" class="nav-secondary" data-go="{{ loop.index0 - 1 }}">← Anterior</button>{% else %}<span></span>{% endif %}{% if not loop.last %}<button type="button" class="nav-primary" data-go="{{ loop.index0 + 1 }}">Próximo cargo →</button>{% else %}<button type="button" class="nav-primary" id="reviewVote">Revisar votação →</button>{% endif %}</div>
+</div>{% endfor %}
+<div class="review-box" id="reviewBox" hidden><h2>Revise seus votos</h2><p>Confira o candidato escolhido para cada cargo antes de registrar.</p><div id="reviewList"></div><button type="button" class="submit" id="openConfirm">Confirmar todos os votos →</button><button type="button" class="nav-secondary" id="backToBallot">Voltar à urna</button></div>
 </section>
-{% endfor %}
-<button class="submit" type="button" id="openConfirm">Confirmar todos os votos <span>→</span></button>
-<p class="privacy">Confira suas escolhas antes de confirmar. Depois de votar, não será possível votar novamente com este nome.</p>
+<aside class="urn-info"><h2>ⓘ Informações</h2><div class="info-row"><span>▣</span><div><small>Cargo atual</small><strong id="currentCargo">{{ cargos[0].nome }}</strong></div></div><div class="info-row"><span>⬡</span><div><small>Total de cargos</small><strong>8</strong></div></div><div class="info-row"><span>●</span><div><small>Votação</small><strong class="open-status">● Aberta</strong></div></div><div class="info-note">🛡 Cada voto é único e não pode ser alterado após a confirmação.</div></aside>
+</div>
 </form>
-{% else %}
-<div class="closed"><span>🗳️</span><h2>Nenhum candidato cadastrado</h2><p>O responsável precisa cadastrar as chapas e os candidatos no painel administrativo antes de abrir a votação.</p></div>
-{% endif %}
-{% else %}<div class="closed"><span>🔒</span><h2>Votação encerrada</h2><p>Obrigado pela participação!</p></div>{% endif %}
+{% else %}<div class="closed"><span>🗳️</span><h2>Nenhum candidato cadastrado</h2><p>O responsável precisa cadastrar os candidatos no painel administrativo antes de abrir a votação.</p></div>{% endif %}
 </main>
-<div class="confirm-overlay" id="confirmOverlay" aria-hidden="true"><div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="confirmTitle"><div class="confirm-icon">?</div><h2 id="confirmTitle">Certeza do seu voto?</h2><p>Depois de confirmar, seus votos serão registrados para todos os cargos e não será possível votar novamente com este nome.</p><div class="confirm-actions"><button type="button" class="confirm-cancel" id="cancelConfirm">Voltar</button><button type="button" class="confirm-yes" id="yesConfirm">Sim, confirmar voto</button></div></div></div>
-<footer>Participação estudantil começa com a sua voz.</footer>
+<div class="confirm-overlay" id="confirmOverlay" aria-hidden="true"><div class="confirm-box" role="dialog" aria-modal="true" aria-labelledby="confirmTitle"><div class="confirm-icon">?</div><h2 id="confirmTitle">Certeza dos seus votos?</h2><p>Depois de confirmar, os votos serão registrados para todos os cargos e não será possível votar novamente com este nome.</p><div class="confirm-actions"><button type="button" class="confirm-cancel" id="cancelConfirm">Voltar</button><button type="button" class="confirm-yes" id="yesConfirm">Sim, confirmar voto</button></div></div></div>
+<footer>Vota Grêmio · Eleição do Grêmio Estudantil <span>Transparência · Respeito · Democracia</span></footer>
 <script>
-const voteForm = document.getElementById('voteForm');
-const overlay = document.getElementById('confirmOverlay');
-document.getElementById('openConfirm')?.addEventListener('click', () => {
-  if (!voteForm.reportValidity()) return;
-  overlay.classList.add('show');
-  overlay.setAttribute('aria-hidden', 'false');
-});
-function closeConfirm() {
-  overlay.classList.remove('show');
-  overlay.setAttribute('aria-hidden', 'true');
-}
-document.getElementById('cancelConfirm')?.addEventListener('click', closeConfirm);
-document.getElementById('yesConfirm')?.addEventListener('click', () => {
-  document.getElementById('yesConfirm').disabled = true;
-  voteForm.submit();
-});
-overlay?.addEventListener('click', e => { if (e.target === overlay) closeConfirm(); });
+const voteForm=document.getElementById('voteForm');
+const overlay=document.getElementById('confirmOverlay');
+const candidateData={{ candidatos|tojson }};
+const tabs=[...document.querySelectorAll('.cargo-tab')], screens=[...document.querySelectorAll('.cargo-screen')];
+let current=0;
+function showCargo(i){current=i;tabs.forEach((b,n)=>b.classList.toggle('active',n===i));screens.forEach((s,n)=>s.classList.toggle('active',n===i));document.getElementById('currentCargo').textContent=screens[i].dataset.cargo;document.getElementById('reviewBox').hidden=true;document.querySelector('.urn-main').classList.remove('reviewing');}
+tabs.forEach((b,i)=>b.addEventListener('click',()=>showCargo(i)));
+function lookup(i){const screen=screens[i], input=document.getElementById('number-'+i), number=input.value, status=screen.querySelector('.number-status'), card=document.getElementById('candidate-'+i), hidden=document.getElementById('selected-'+i);hidden.value='';
+if(!number){status.textContent='Digite um número para consultar.';status.className='number-status';card.innerHTML='<div class="candidate-empty"><span>?</span><strong>Quem será seu candidato?</strong><small>O candidato aparecerá aqui após digitar um número válido.</small></div>';return false;}
+const candidate=candidateData.find(c=>String(c.numero)===number&&(c.cargo||'').trim().toLocaleLowerCase('pt-BR')===screen.dataset.cargo.toLocaleLowerCase('pt-BR'));
+if(!candidate){status.textContent='Não é possível votar nesse número para este cargo. Tente outro número.';status.className='number-status invalid';card.innerHTML='<div class="candidate-empty invalid"><span>!</span><strong>Número não cadastrado</strong><small>Confira o número e tente novamente.</small></div>';return false;}
+hidden.value=String(candidate.id);status.textContent='Candidato encontrado! Confira os dados antes de continuar.';status.className='number-status valid';
+const photo=candidate.foto?'/'+candidate.foto:'';
+card.innerHTML='<div class="candidate-person">'+(photo?'<img class="candidate-portrait" src="'+photo.replace(/"/g,'&quot;')+'" alt="">':'<span class="candidate-portrait portrait-placeholder">👤</span>')+'<div><small>CANDIDATO Nº '+candidate.numero+'</small><h3></h3><p></p></div></div>';
+card.querySelector('h3').textContent=candidate.nome;
+const p=card.querySelector('p');p.textContent='Chapa: '+((candidate.chapa&&candidate.chapa.nome)||'Sem chapa');
+return true;}
+screens.forEach((screen,i)=>{const input=document.getElementById('number-'+i);screen.querySelectorAll('[data-digit]').forEach(b=>b.addEventListener('click',()=>{if(input.value.length<6)input.value+=b.dataset.digit;lookup(i);}));screen.querySelector('[data-action="delete"]').addEventListener('click',()=>{input.value=input.value.slice(0,-1);lookup(i);});screen.querySelector('[data-action="clear"]').addEventListener('click',()=>{input.value='';lookup(i);});screen.querySelector('[data-action="check"]').addEventListener('click',()=>lookup(i));});
+document.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>{const i=Number(b.dataset.go);if(!document.getElementById('selected-'+current).value){lookup(current);return;}showCargo(i);}));
+document.getElementById('reviewVote')?.addEventListener('click',()=>{if(!voteForm.reportValidity())return;let missing=screens.findIndex((s,i)=>!document.getElementById('selected-'+i).value);if(missing!==-1){showCargo(missing);lookup(missing);return;}const list=document.getElementById('reviewList');list.innerHTML='';screens.forEach((s,i)=>{const c=candidateData.find(x=>String(x.id)===document.getElementById('selected-'+i).value);const row=document.createElement('div');row.className='review-row';const label=document.createElement('strong');label.textContent=s.dataset.cargo;const val=document.createElement('span');val.textContent=c?c.numero+' — '+c.nome:'Não selecionado';row.append(label,val);list.append(row);});document.querySelector('.urn-main').classList.add('reviewing');document.getElementById('reviewBox').hidden=false;});
+document.getElementById('backToBallot')?.addEventListener('click',()=>showCargo(0));
+document.getElementById('openConfirm')?.addEventListener('click',()=>{if(!voteForm.reportValidity())return;overlay.classList.add('show');overlay.setAttribute('aria-hidden','false');});
+function closeConfirm(){overlay.classList.remove('show');overlay.setAttribute('aria-hidden','true');}
+document.getElementById('cancelConfirm')?.addEventListener('click',closeConfirm);
+document.getElementById('yesConfirm')?.addEventListener('click',()=>{document.getElementById('yesConfirm').disabled=true;voteForm.submit();});
+overlay?.addEventListener('click',e=>{if(e.target===overlay)closeConfirm();});
 </script></body></html>
