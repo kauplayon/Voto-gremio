@@ -7,9 +7,14 @@ from flask import Flask, render_template, request, redirect, url_for, session, f
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "troque-esta-chave-antes-de-usar")
+SECRET_KEY = os.environ.get("SECRET_KEY", "").strip()
+if len(SECRET_KEY) < 32:
+    raise RuntimeError("Configure SECRET_KEY no Render com uma chave aleatória de pelo menos 32 caracteres.")
+app.secret_key = SECRET_KEY
 app.config["MAX_CONTENT_LENGTH"] = 4 * 1024 * 1024
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "").strip()
+if not ADMIN_PASSWORD or ADMIN_PASSWORD == "admin123":
+    raise RuntimeError("Configure uma ADMIN_PASSWORD personalizada no Render.")
 DATA_DIR = os.environ.get("DATA_DIR", os.path.dirname(__file__))
 DATA_FILE = os.path.join(DATA_DIR, "votos.json")
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
